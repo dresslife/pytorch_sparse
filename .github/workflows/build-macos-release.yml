@@ -1,0 +1,66 @@
+name: Build macOS Wheels
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to upload wheels to (e.g. 0.6.18)'
+        required: true
+
+jobs:
+  wheel:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-13]
+        python-version: ['3.10', '3.13']
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install PyTorch (CPU)
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          python -c "import torch; print('PyTorch:', torch.__version__)"
+
+      - name: Install torch-scatter
+        run: |
+          PYTHON_TAG=cp$(python -c "import sys; print(f'{sys.version_info.major}{sys.version_info.minor}')")
+          ARCH=$(python -c "import platform; a = platform.machine(); print('arm64' if a == 'arm64' else 'x86_64')")
+          if ! pip install torch-scatter -f https://data.pyg.org/whl/torch-2.6.0+cpu.html 2>/dev/null; then
+            mkdir -p /tmp/scatter_wheels
+            gh release download 2.1.2 \
+              --repo dresslife/pytorch_scatter \
+              --pattern "torch_scatter-*-${PYTHON_TAG}-${PYTHON_TAG}-macosx_*_${ARCH}.whl" \
+              --dir /tmp/scatter_wheels 2>/dev/null \
+            && pip install /tmp/scatter_wheels/torch_scatter-*.whl \
+            || echo "Warning: torch-scatter not available for ${PYTHON_TAG}"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+
+      - name: Install METIS
+        run: brew install metis
+
+      - name: Build wheel
+        run: |
+          FORCE_ONLY_CPU=1 WITH_METIS=1 CMAKE_PREFIX_PATH=$(brew --prefix) \
+          python setup.py bdist_wheel --dist-dir=dist
+        shell: bash
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          files: dist/*.whl
+          fail_on_unmatched_files: true
+          token: ${{ secrets.GITHUB_TOKEN }}
