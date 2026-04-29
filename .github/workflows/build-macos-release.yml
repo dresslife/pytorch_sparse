@@ -28,14 +28,14 @@ jobs:
       - name: Install PyTorch (CPU)
         run: |
           pip install --upgrade pip setuptools wheel
-          pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install torch==2.7.0 --index-url https://download.pytorch.org/whl/cpu
           python -c "import torch; print('PyTorch:', torch.__version__)"
 
       - name: Install torch-scatter
         run: |
           PYTHON_TAG=cp$(python -c "import sys; print(f'{sys.version_info.major}{sys.version_info.minor}')")
           ARCH=$(python -c "import platform; a = platform.machine(); print('arm64' if a == 'arm64' else 'x86_64')")
-          if ! pip install torch-scatter -f https://data.pyg.org/whl/torch-2.6.0+cpu.html 2>/dev/null; then
+          if ! pip install torch-scatter -f https://data.pyg.org/whl/torch-2.7.0+cpu.html 2>/dev/null; then
             mkdir -p /tmp/scatter_wheels
             gh release download 2.1.2 \
               --repo dresslife/pytorch_scatter \
